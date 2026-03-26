@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Incident Management Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <h1>Incident Management Dashboard</h1>
+  </header>
+
+  <main class="container">
+
+    <!-- Summary Cards -->
+    <section class="summary-cards">
+      <div class="card">
+        <span class="card-value">{{ total }}</span>
+        <span class="card-label">Total Incidents</span>
+      </div>
+      <div class="card card--open">
+        <span class="card-value">{{ open_count }}</span>
+        <span class="card-label">Open</span>
+      </div>
+      <div class="card card--critical">
+        <span class="card-value">{{ critical_count }}</span>
+        <span class="card-label">Critical</span>
+      </div>
+      <div class="card card--escalated">
+        <span class="card-value">{{ escalated_count }}</span>
+        <span class="card-label">Escalated</span>
+      </div>
+    </section>
+
+    <!-- Filter Bar -->
+    <section class="filter-bar">
+      <form method="get" action="/">
+        <label for="severity">Severity</label>
+        <select name="severity" id="severity">
+          <option value="">All</option>
+          {% for s in severities %}
+            <option value="{{ s }}" {% if severity_filter == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="status">Status</label>
+        <select name="status" id="status">
+          <option value="">All</option>
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="escalated">Escalated</label>
+        <select name="escalated" id="escalated">
+          <option value="">All</option>
+          <option value="true" {% if escalated_filter == 'true' %}selected{% endif %}>Yes</option>
+          <option value="false" {% if escalated_filter == 'false' %}selected{% endif %}>No</option>
+        </select>
+
+        <button type="submit" class="btn btn--filter">Apply Filters</button>
+        <a href="/" class="btn btn--clear">Clear</a>
+      </form>
+    </section>
+
+    <!-- Validation errors (form redirect) -->
+    {% if request.args.get('error') %}
+    <div class="alert alert--error">
+      <strong>Validation error:</strong>
+      <ul>
+        {% for msg in request.args.get('error').split('|') %}
+          <li>{{ msg }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- Incident Table -->
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th>Impacted Service</th>
+            <th>Owner</th>
+            <th>Due</th>
+            <th>Escalated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inc in incidents %}
+          <tr class="
+            {% if inc.severity == 'Critical' and inc.status != 'Closed' %}row--critical{% endif %}
+            {% if inc.severity == 'High' and is_overdue(inc) and inc.status != 'Closed' %}row--overdue{% endif %}
+            {% if inc.escalated %}row--escalated{% endif %}
+          ">
+            <td>{{ inc.id }}</td>
+            <td>
+              {{ inc.title }}
+              {% if inc.escalated %}
+                <span class="badge badge--escalated" title="{{ inc.escalation_reason }}">ESCALATED</span>
+              {% endif %}
+            </td>
+            <td><span class="badge badge--{{ inc.severity | lower }}">{{ inc.severity }}</span></td>
+            <td><span class="badge badge--status badge--{{ inc.status | lower | replace(' ', '-') }}">{{ inc.status }}</span></td>
+            <td>{{ inc.impacted_service }}</td>
+            <td>{{ inc.owner }}</td>
+            <td>{{ inc.due_at[:16] }}</td>
+            <td>{{ "Yes" if inc.escalated else "No" }}</td>
+            <td>
+              <form method="post" action="/incidents/{{ inc.id }}/status" class="inline-form">
+                <select name="status">
+                  {% for s in statuses %}
+                    <option value="{{ s }}" {% if inc.status == s %}selected{% endif %}>{{ s }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn--sm">Update</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="empty">No incidents match the selected filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Create Incident Form -->
+    <section class="create-form">
+      <h2>Create New Incident</h2>
+      <form method="post" action="/incidents">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="f-title">Title *</label>
+            <input type="text" id="f-title" name="title" required>
+          </div>
+          <div class="form-group">
+            <label for="f-severity">Severity *</label>
+            <select id="f-severity" name="severity" required>
+              <option value="">-- select --</option>
+              {% for s in severities %}
+                <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="f-service">Impacted Service *</label>
+            <input type="text" id="f-service" name="impacted_service" required>
+          </div>
+          <div class="form-group">
+            <label for="f-owner">Owner *</label>
+            <input type="text" id="f-owner" name="owner" required>
+          </div>
+          <div class="form-group">
+            <label for="f-due">Due At * (ISO datetime)</label>
+            <input type="datetime-local" id="f-due" name="due_at" required>
+          </div>
+          <div class="form-group full-width">
+            <label for="f-desc">Description *</label>
+            <textarea id="f-desc" name="description" rows="3" required></textarea>
+          </div>
+        </div>
+        <button type="submit" class="btn btn--primary">Create Incident</button>
+      </form>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <p>Internal Incident Management &mdash; v1.0</p>
+  </footer>
+
+</body>
+</html>
